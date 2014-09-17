@@ -35,6 +35,46 @@ class contrail::config {
         }
     }
 
+
+
+
+
+    define fix_rabbitmq_conf() {
+	if($internal_vip != "") {
+	    exec { "rabbit_os_fix":
+		command => "rabbitmqctl set_policy HA-all \"\" '{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}' && echo rabbit_os_fix >> /etc/contrail/contrail_openstack_exec.out",
+                require => package["contrail-openstack-ha"],
+                unless  => "grep -qx rabbit_os_fix /etc/contrail/contrail_openstack_exec.out",
+                provider => shell,
+                logoutput => "true"
+            }
+
+	}
+
+	if ! defined(File["/opt/contrail/contrail_installer/set_rabbit_tcp_params.py"]) {
+
+	    # check_wsrep
+	    file { "/opt/contrail/contrail_installer/set_rabbit_tcp_params.py" :
+		ensure  => present,
+		mode => 0755,
+		group => root,
+		source => "puppet:///modules/$module_name/set_rabbit_tcp_params.py"
+	    }
+
+
+	    exec { "exec_set_rabbitmq_tcp_params" :
+		command => "python /opt/contrail/contrail_installer/set_rabbit_tcp_params.py",
+		cwd => "/opt/contrail/contrail_installer/",
+		unless  => "grep -qx exec_set_rabbitmq_tcp_params /etc/contrail/contrail_openstack_exec.out",
+		provider => shell,
+		require => [ File["/opt/contrail/contrail_installer/set_rabbit_tcp_params.py"] ],
+		logoutput => 'true'
+	    }
+	}
+
+    }
+
+
     define build-ctrl-details($contrail_haproxy,
                   $contrail_ks_auth_protocol="http",
                   $contrail_quantum_service_protocol="http",
@@ -46,7 +86,21 @@ class contrail::config {
             $quantum_ip = "127.0.0.1"
             } else {
             $quantum_ip = $contrail_config_ip
-        }
+            }
+	    if ($internal_vip == undef) {
+                $internal_vip = "none"
+            }
+            if ($external_vip == undef) {
+                $external_vip = "none"
+            }
+            if ($contrail_internal_vip == undef) {
+                $contrail_internal_vip = "none"
+            }
+            if ($contrail_external_vip == undef) {
+                $contrail_external_vip = "none"
+            }
+
+
             file { "/etc/contrail/ctrl-details" :
                 ensure  => present,
                 content => template("$module_name/ctrl-details.erb"),
@@ -364,6 +418,8 @@ class contrail::config {
                     contrail_rmq_is_master => $contrail_rmq_is_master
                     }
 
+        ->
+        fix_rabbitmq_conf{fix_rabbitmq_conf:}
         ->
         setup-pki{setup_pki:
             contrail_use_certs => $contrail_use_certs}

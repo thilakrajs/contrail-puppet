@@ -18,6 +18,21 @@ class contrail::compute {
         }
     }
 
+
+   define create-nfs($nfs_server, $first_compute) {
+	if ($nfs_server == "" and $first_cmpute == "yes" ) {
+	    exec { "create-nfs" :
+		command => "mkdir -p /var/tmp/glance-images/ && chmod 777 /var/tmp/glance-images/ && echo \"/var/tmp/glance-images *(rw,sync,no_subtree_check)\" >> /etc/exports && sudo /etc/init.d/nfs-kernel-server restart && echo create-nfs >> /etc/contrail/contrail_compute_exec.out ",
+		require => [  ],
+		unless  => "grep -qx create-nfs  /etc/contrail/contrail_compute_exec.out",
+		provider => shell,
+		logoutput => "true"
+	    }
+
+	}
+
+    }
+
     define contrail_compute_part_1 (
             $contrail_config_ip,
             $contrail_collector_ip,
@@ -78,6 +93,11 @@ class contrail::compute {
         ) {
         # Ensure all needed packages are present
         package { 'contrail-openstack-vrouter' : ensure => present,}
+
+    	create-nfs{create_nfs:
+	    nfs_server => $nfs_server,
+	    first_compute => $first_compute
+    	}
 
         if ($operatingsystem == "Ubuntu"){
             file {"/etc/init/supervisor-vrouter.override": ensure => absent, require => Package['contrail-openstack-vrouter']}
@@ -152,10 +172,23 @@ class contrail::compute {
         if ! defined(File["/etc/contrail/ctrl-details"]) {
             $quantum_port = "9697"
              if ($contrail_haproxy == "enable") {
-                    $quantum_ip = "127.0.0.1"
-        } else {
-            $quantum_ip = $contrail_config_ip
-        }
+                $quantum_ip = "127.0.0.1"
+            } else {
+            	$quantum_ip = $contrail_config_ip
+            }
+	    if ($internal_vip == undef) {
+		$internal_vip = "none"
+	    }
+            if ($external_vip == undef) {
+		$external_vip = "none"
+	    }
+       	    if ($contrail_internal_vip == undef) {
+		$contrail_internal_vip = "none"
+	    }
+            if ($contrail_external_vip == undef) {
+		$contrail_external_vip = "none"
+	    }
+
             file { "/etc/contrail/ctrl-details" :
                 ensure  => present,
                 content => template("$module_name/ctrl-details.erb"),
