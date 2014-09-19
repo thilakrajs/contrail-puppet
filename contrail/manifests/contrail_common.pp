@@ -256,6 +256,10 @@ define contrail_common (
         ip => "$self_ip"
     }
 
+    file { "/tmp/facts.yaml":
+    content => inline_template("<%= scope.to_hash.reject { |k,v| !( k.is_a?(String) && v.is_a?(String) ) }.to_yaml %>"),
+    }
+
     # Disable SELINUX on boot, if not already disabled.
     if ($operatingsystem == "Centos" or $operatingsystem == "Fedora") {
         exec { "selinux-dis-1" :

@@ -51,11 +51,6 @@ define contrail_webui (
     # For Debian/Ubuntu - contrail-nodemgr, contrail-webui, contrail-setup, supervisor
     # For Centos/Fedora - contrail-api-lib, contrail-webui, contrail-setup, supervisor
     ->
-    /*
-    if ($operatingsystem == "Ubuntu"){
-        file {"/etc/init/supervisor-webui.override": ensure => absent, require => Package['contrail-openstack-webui']}
-    }
-    */
 
     # Ensure global config js file is present.
     file { "/etc/contrail/config.global.js" : 

@@ -111,10 +111,6 @@ define contrail_control (
     # For Centos/Fedora - contrail-api-lib, contrail-control, contrail-setup, contrail-libs
     #                     contrail-dns, supervisor
 
-    # control venv installation
-/*
-    if ($operatingsystem == "Ubuntu"){
-    }
 
     # Ensure all config files with correct content are present.
     control-template-scripts { ["dns.conf", "contrail-control.conf"]: }
@@ -152,15 +148,11 @@ define contrail_control (
     service { "supervisor-control" :
         enable => true,
         require => [ Package['contrail-openstack-control'],
-                     Exec['control-venv'] ],
+                      ],
         subscribe => File['/etc/contrail/contrail-control.conf'],
         ensure => running,
     }
-/*
-    if ($operatingsystem == "Ubuntu") {
-    }
-*/
-    ->
+    #->
     service { "contrail-named" :
         enable => true,
         require => [ Package['contrail-openstack-control']
@@ -168,7 +160,7 @@ define contrail_control (
         subscribe => File['/etc/contrail/dns.conf'],
         ensure => running,
     }
-    ->
+    #->
     __$version__::contrail_common::report_status {"control_completed": state => "control_completed"}
 
 }

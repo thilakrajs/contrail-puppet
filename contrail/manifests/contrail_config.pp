@@ -17,6 +17,44 @@ define config-scripts {
     }
 }
 
+
+define fix_rabbitmq_conf() {
+	if($internal_vip != "") {
+
+            exec { "rabbit_os_fix":
+                command => "rabbitmqctl set_policy HA-all \"\" '{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}' && echo rabbit_os_fix >> /etc/contrail/contrail_openstack_exec.out",
+                require => package["contrail-openstack-ha"],
+                unless  => "grep -qx rabbit_os_fix /etc/contrail/contrail_openstack_exec.out",
+                provider => shell,
+                logoutput => "true"
+            }
+
+	}
+
+if ! defined(File["/opt/contrail/contrail_installer/set_rabbit_tcp_params.py"]) {
+
+	    # check_wsrep
+	    file { "/opt/contrail/contrail_installer/set_rabbit_tcp_params.py" :
+		ensure  => present,
+		mode => 0755,
+		group => root,
+		source => "puppet:///modules/$module_name/set_rabbit_tcp_params.py"
+	    }
+
+
+	    exec { "exec_set_rabbitmq_tcp_params" :
+		command => "python /opt/contrail/contrail_installer/set_rabbit_tcp_params.py",
+		cwd => "/opt/contrail/contrail_installer/",
+		unless  => "grep -qx exec_set_rabbitmq_tcp_params /etc/contrail/contrail_openstack_exec.out",
+		provider => shell,
+		require => [ File["/opt/contrail/contrail_installer/set_rabbit_tcp_params.py"] ],
+		logoutput => 'true'
+	    }
+}
+
+}
+
+
 # Macro to setup the configuration files from templates.
 define config-template-scripts {
     # Ensure template param file is present with right content.
@@ -41,6 +79,22 @@ define build-ctrl-details($contrail_haproxy,
         } else {
 		$quantum_ip = $contrail_config_ip
 	}
+
+        if ($internal_vip == undef) {
+                $internal_vip = "none"
+        }
+        if ($external_vip == undef) {
+                $external_vip = "none"
+        }
+       if ($contrail_internal_vip == undef) {
+                $contrail_internal_vip = "none"
+        }
+       if ($contrail_external_vip == undef) {
+                $contrail_external_vip = "none"
+        }
+
+
+	$contrail_openstack_index = none
         file { "/etc/contrail/ctrl-details" :
             ensure  => present,
             content => template("$module_name/ctrl-details.erb"),
@@ -109,6 +163,8 @@ define setup-rabbitmq-cluster($contrail_uuid,
 				$contrail_rmq_is_master				
 			    ) {
 
+    $contrail_rabbithost_list_for_shell = inline_template('<%= contrail_rabbit_user.gsub(/\,/, " ").delete "[]" %>')
+
     # Handle rabbitmq.config changes
     $conf_file = "/etc/rabbitmq/rabbitmq.config"
     file { "/etc/contrail/contrail_setup_utils/cfg-rabbitmq.sh" : 
@@ -119,6 +175,7 @@ define setup-rabbitmq-cluster($contrail_uuid,
         require => Package['contrail-openstack-config'],
         source => "puppet:///modules/$module_name/cfg-qpidd-rabbitmq.sh"
     }
+    ->
     exec { "exec-cfg-rabbitmq" :
         command => "/bin/bash /etc/contrail/contrail_setup_utils/cfg-rabbitmq.sh $conf_file $self_ip $contrail_rabbit_user $contrail_cfgm_number && echo exec-cfg-rabbitmq >> /etc/contrail/contrail_config_exec.out",
         require =>  File["/etc/contrail/contrail_setup_utils/cfg-rabbitmq.sh"],
@@ -126,7 +183,7 @@ define setup-rabbitmq-cluster($contrail_uuid,
         provider => shell,
         logoutput => 'true'
     }
-
+    ->
     file { "/etc/contrail/contrail_setup_utils/setup_rabbitmq_cluster.sh":
         ensure  => present,
         mode => 0755,
@@ -135,7 +192,7 @@ define setup-rabbitmq-cluster($contrail_uuid,
         require => Package["contrail-openstack-config"],
         source => "puppet:///modules/$module_name/setup_rabbitmq_cluster.sh"
     }
-
+    ->
     exec { "setup-rabbitmq-cluster" :
         command => "/bin/bash /etc/contrail/contrail_setup_utils/setup_rabbitmq_cluster.sh $operatingsystem $contrail_uuid $contrail_rmq_master $contrail_rmq_is_master '$contrail_rabbithost_list_for_shell' && echo setup_rabbitmq_cluster >> /etc/contrail/contrail_config_exec.out",
         require => File["/etc/contrail/contrail_setup_utils/setup_rabbitmq_cluster.sh"],
@@ -143,7 +200,7 @@ define setup-rabbitmq-cluster($contrail_uuid,
         provider => shell,
         logoutput => "true"
     }
-
+    ->
 
     file { "/etc/contrail/contrail_setup_utils/check_rabbitmq_cluster.sh":
         ensure  => present,
@@ -153,13 +210,14 @@ define setup-rabbitmq-cluster($contrail_uuid,
         require => Package["contrail-openstack-config"],
         source => "puppet:///modules/$module_name/check_rabbitmq_cluster.sh"
     }
+    ->
     notify { $contrail_rabbit_user:; }  
+    ->
 
-    $contrail_rabbithost_list_for_shell = inline_template('<%= contrail_rabbit_user.gsub(/\,/, " ").delete "[]" %>')
-
-    notify { $contrail_rabbithost_list_for_shell:; }  
+    notify { $contrail_rabbithost_list_for_shell:; } 
     #Check to see if the rabbitmq cluster is fully formed,
     #else dont process in the chain
+    ->
     exec { "check-rabbitmq-cluster" :
         command => "/bin/bash /etc/contrail/contrail_setup_utils/check_rabbitmq_cluster.sh '$contrail_rabbithost_list_for_shell' && echo check_rabbitmq_cluster >> /etc/contrail/contrail_config_exec.out",
         require => File["/etc/contrail/contrail_setup_utils/check_rabbitmq_cluster.sh"],
@@ -455,6 +513,9 @@ define contrail_config (
 				contrail_rmq_master => $contrail_rmq_master,
 				contrail_rmq_is_master => $contrail_rmq_is_master
 				}
+
+    ->
+    fix_rabbitmq_conf{fix_rabbitmq_conf:}
 
     ->
     setup-pki{setup_pki:
