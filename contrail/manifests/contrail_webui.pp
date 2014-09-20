@@ -43,10 +43,12 @@ define contrail_webui (
     # Ensure all needed packages are present
     package { 'contrail-openstack-webui' : ensure => present,}
 
-    if 'storage-master' in $contrail_host_roles {
-	package { 'contrail-web-storage' : ensure => present,}
-	-> Service['supervisor-webui']
-    }
+##move this to a seprate resource
+#    if 'storage-master' in $contrail_host_roles {
+#	package { 'contrail-web-storage' : ensure => present,}
+#	-> Service['supervisor-webui']
+#    }
+
     # The above wrapper package should be broken down to the below packages
     # For Debian/Ubuntu - contrail-nodemgr, contrail-webui, contrail-setup, supervisor
     # For Centos/Fedora - contrail-api-lib, contrail-webui, contrail-setup, supervisor
@@ -59,12 +61,6 @@ define contrail_webui (
         content => template("$module_name/config.global.js.erb"),
     }
     ->
-/*
-    # Below is temporary to work-around in Ubuntu as Service resource fails
-    # as upstart is not correctly linked to /etc/init.d/service-name
-    if ($operatingsystem == "Ubuntu") {
-    }
-*/
     # Ensure the services needed are running. The individual services are left
     # under control of supervisor. Hence puppet only checks for continued operation
     # of supervisor-webui service, which in turn monitors status of individual

@@ -30,6 +30,18 @@ define check_keep_alived() {
 
 }
 
+define openstack_hacks() {
+    exec { "openstack_hacks" :
+        command => "openstack-config --set /etc/nova/nova.conf DEFAULT neutron_url http://$internal_vip:9696/ && openstack-config --set /etc/nova/nova.conf DEFAULT neutron_admin_auth_url http://$internal_vip:5000/v2.0/ && service supervisor-openstack restart && echo openstack_hacks >> /etc/contrail/contrail_openstack_exec.out",
+        unless  => "grep -qx openstack_hacks /etc/contrail/contrail_openstack_exec.out",
+        provider => shell,
+        logoutput => "true"
+    }
+
+
+
+}
+
 define check_mysql_state() {
 	if ($contrail_openstack_index != "1" ) {
 	    # check_mysql
@@ -126,8 +138,8 @@ define setup-haproxy-config() {
 
 define setup-ha($internal_vip) {
 	    notify { "contrail intenal_vip  is '$internal_vip' ":; }
+        if ($internal_vip != '' and $internal_vip != 'none') {
 
-    if($internal_vip != '') {
 	    if ($operatingsystem == "Ubuntu") {
 		$wsrep_conf='/etc/mysql/conf.d/wsrep.cnf'
 	    } else {
@@ -319,7 +331,8 @@ fix-wsrep{'fix_wsrep':}
 
 	    fix-cmon-param-and-copy-ssh {'fix_cmon_param_and_copy_ssh':}
 	    #########Chhandak-HA End Here
-} elsif ($contrail_internal_vip != '') {
+} elsif (($contrail_internal_vip != '') and
+         ($contrail_internal_vip != 'none')){
 
 	    $contrail_exec_vnc_keepalived = "PASSWORD=$root_password ADMIN_TOKEN=$contrail_service_token python setup-vnc-keepalived.py --self_ip $self_ip --internal_vip $internal_vip --mgmt_self_ip $contrail_openstack_mgmt_ip --self_index $contrail_openstack_index --num_nodes $openstack_num_nodes --role openstack && echo exec_vnc_keepalived >> /etc/contrail/contrail_openstack_exec.out"
 	    # KEEPALIVED
@@ -368,35 +381,38 @@ define setup-openstack-ha($ha) {
 }
 
 define setup-cluster-monitor {
-	exec { "setup-cluster-monitor" :
-	command => "service contrail-hamon restart && chkconfig contrail-hamon on  && echo setup-cluster-monitor >> /etc/contrail/contrail_openstack_exec.out ",
-	require => [  ],
-	unless  => "grep -qx setup-cluster-monitor  /etc/contrail/contrail_compute_exec.out",
-	provider => shell,
-	logoutput => "true"
-    }
+    notify { "cluser-monitor: internal_vip  is '$internal_vip' ":; }
 
+	if ($internal_vip != '' and $internal_vip != 'none') {
+
+		exec { "setup-cluster-monitor" :
+		command => "service contrail-hamon restart && chkconfig contrail-hamon on  && echo setup-cluster-monitor >> /etc/contrail/contrail_openstack_exec.out ",
+		require => [  ],
+		unless  => "grep -qx setup-cluster-monitor  /etc/contrail/contrail_compute_exec.out",
+		provider => shell,
+		logoutput => "true"
+	    }
+	}
 }
 
 define fetch-ssl-certs($os_master, $os_username, $os_password)
 {
-
-#/*
-    	file { "/opt/contrail/contrail_installer/transfer_keys.py":
-       	   ensure  => present,
-           mode => 0755,
-           owner => root,
-           group => root,
-           source => "puppet:///modules/$module_name/transfer_keys.py"
-        }
-        exec { "exec-transfer-keys":
-                command => "python /opt/contrail/contrail_installer/transfer_keys.py $os_master \"/etc/ssl/\" $os_username $os_password && echo exec-transfer-keys >> /etc/contrail/contrail_openstack_exec.out",
-                provider => shell,
-                logoutput => "true",
-		unless  => "grep -qx exec-transfer-keys  /etc/contrail/contrail_oprenstack_exec.out",
-                require => File["/opt/contrail/contrail_installer/transfer_keys.py"]
-        }
-#*/
+	if ($internal_vip != '' and $internal_vip != 'none') {
+		file { "/opt/contrail/contrail_installer/transfer_keys.py":
+		   ensure  => present,
+		   mode => 0755,
+		   owner => root,
+		   group => root,
+		   source => "puppet:///modules/$module_name/transfer_keys.py"
+		}
+		exec { "exec-transfer-keys":
+			command => "python /opt/contrail/contrail_installer/transfer_keys.py $os_master \"/etc/ssl/\" $os_username $os_password && echo exec-transfer-keys >> /etc/contrail/contrail_openstack_exec.out",
+			provider => shell,
+			logoutput => "true",
+			unless  => "grep -qx exec-transfer-keys  /etc/contrail/contrail_oprenstack_exec.out",
+			require => File["/opt/contrail/contrail_installer/transfer_keys.py"]
+		}
+	}
 }
 
 define mount-nfs($nfs_server, $glance_path) {
@@ -437,8 +453,8 @@ define fix-memcache-conf() {
 }
 
 define fix-cmon-param-and-copy-ssh() {
-        $compute_ip_list_shell = inline_template('<%= compute_ip_list.map{ |ip| "#{ip}" }.join(",") %>')
-        $config_ip_list_shell = inline_template('<%= config_ip_list.map{ |ip| "#{ip}" }.join(",") %>')
+        $compute_host_list_shell = inline_template('<%= compute_host_list.map{ |ip| "#{ip}" }.join(",") %>')
+        $config_host_list_shell = inline_template('<%= config_host_list.map{ |ip| "#{ip}" }.join(",") %>')
     	file { "/opt/contrail/contrail_installer/fix-cmon-params-and-add-ssh-keys.py":
        	   ensure  => present,
            mode => 0755,
@@ -447,7 +463,7 @@ define fix-cmon-param-and-copy-ssh() {
            source => "puppet:///modules/$module_name/fix-cmon-params-and-add-ssh-keys.py"
         }
         exec { "exec-fix-cmon":
-                command => "python /opt/contrail/contrail_installer/fix-cmon-params-and-add-ssh-keys.py $compute_ip_list_shell $config_ip_list_shell && echo exec-fix-cmon-add-params >> /etc/contrail/contrail_openstack_exec.out",
+                command => "python /opt/contrail/contrail_installer/fix-cmon-params-and-add-ssh-keys.py $compute_host_list_shell $config_host_list_shell && echo exec-fix-cmon-add-params >> /etc/contrail/contrail_openstack_exec.out",
                 provider => shell,
                 logoutput => "true",
 		unless  => "grep -qx exec-fix-cmon-add-params /etc/contrail/contrail_openstack_exec.out",
@@ -459,25 +475,27 @@ define fix-cmon-param-and-copy-ssh() {
 
 define verify-openstack-status() {
 
-        $openstack_ip_list_shell = inline_template('<%= openstack_ip_list.map{ |ip| "#{ip}" }.join(",") %>')
-        $openstack_user_list_shell = inline_template('<%= openstack_user_list.map{ |ip| "#{ip}" }.join(",") %>')
-        $openstack_password_list_shell = inline_template('<%= openstack_password_list.map{ |ip| "#{ip}" }.join(",") %>')
+	if ($internal_vip != '' and $internal_vip != 'none') {
 
-    	file { "/opt/contrail/contrail_installer/verify_openstack_status.py":
-       	   ensure  => present,
-           mode => 0755,
-           owner => root,
-           group => root,
-           source => "puppet:///modules/$module_name/verify_openstack_status.py"
-        }
-        exec { "exec-verify-openstack-status":
-                command => "python /opt/contrail/contrail_installer/verify_openstack_status.py $openstack_ip_list_shell $openstack_user_list_shell $openstack_password_list_shell && echo exec-verify-openstack-status >> /etc/contrail/contrail_openstack_exec.out",
-                provider => shell,
-                logoutput => "true",
-		unless  => "grep -qx exec-verify-openstack-status  /etc/contrail/contrail_openstack_exec.out",
-                require => File["/opt/contrail/contrail_installer/verify_openstack_status.py"]
-        }
+		$openstack_ip_list_shell = inline_template('<%= openstack_ip_list.map{ |ip| "#{ip}" }.join(",") %>')
+		$openstack_user_list_shell = inline_template('<%= openstack_user_list.map{ |ip| "#{ip}" }.join(",") %>')
+		$openstack_password_list_shell = inline_template('<%= openstack_password_list.map{ |ip| "#{ip}" }.join(",") %>')
 
+		file { "/opt/contrail/contrail_installer/verify_openstack_status.py":
+		   ensure  => present,
+		   mode => 0755,
+		   owner => root,
+		   group => root,
+		   source => "puppet:///modules/$module_name/verify_openstack_status.py"
+		}
+		exec { "exec-verify-openstack-status":
+			command => "python /opt/contrail/contrail_installer/verify_openstack_status.py $openstack_ip_list_shell $openstack_user_list_shell $openstack_password_list_shell && echo exec-verify-openstack-status >> /etc/contrail/contrail_openstack_exec.out",
+			provider => shell,
+			logoutput => "true",
+			unless  => "grep -qx exec-verify-openstack-status  /etc/contrail/contrail_openstack_exec.out",
+			require => File["/opt/contrail/contrail_installer/verify_openstack_status.py"]
+		}
+	}
 }
 
 # Following variables need to be set for this resource.
@@ -558,6 +576,7 @@ define contrail_openstack (
 	os_username => $os_username,
 	os_password => $os_password
 	}
+    openstack_hacks {openstack_hacks:}
 #*/   
     if ($operatingsystem == "Centos" or $operatingsystem == "Fedora") {
         exec { "dashboard-local-settings-1" :
@@ -850,7 +869,10 @@ define contrail_openstack (
     ->
     __$version__::contrail_common::report_status {"openstack_completed": state => "openstack_completed"}
 
-    Package['contrail-openstack']->Setup-ha['setup_ha']->File['/etc/contrail/contrail_setup_utils/api-paste.sh']->Exec['exec-api-paste']->Exec['exec-openstack-qpid-rabbitmq-hostname']->File["/etc/contrail/ctrl-details"]->File["/etc/contrail/service.token"]->Openstack-scripts["keystone-server-setup"]->Openstack-scripts["glance-server-setup"]->Openstack-scripts["cinder-server-setup"]->Openstack-scripts["nova-server-setup"]->Exec['setup-keystone-server-2setup']->Service['openstack-keystone']->Service['mysqld']->Service['memcached']->Exec['neutron-conf-exec']->Exec['dashboard-local-settings-3']->Exec['dashboard-local-settings-4']->Exec['restart-supervisor-openstack']->Verify-openstack-status['verify_openstack_status']->Setup-cluster-monitor['setup_cluster_monitor']->Fetch-ssl-certs['fetch_ssl_certs']
+
+
+    Package['contrail-openstack']->Setup-ha['setup_ha']->File['/etc/contrail/contrail_setup_utils/api-paste.sh']->Exec['exec-api-paste']->Exec['exec-openstack-qpid-rabbitmq-hostname']->File["/etc/contrail/ctrl-details"]->File["/etc/contrail/service.token"]->Openstack-scripts["keystone-server-setup"]->Openstack-scripts["glance-server-setup"]->Openstack-scripts["cinder-server-setup"]->Openstack-scripts["nova-server-setup"]->Exec['setup-keystone-server-2setup']->Service['openstack-keystone']->Service['mysqld']->Service['memcached']->Exec['neutron-conf-exec']->Exec['dashboard-local-settings-3']->Exec['dashboard-local-settings-4']->Exec['restart-supervisor-openstack']->Verify-openstack-status['verify_openstack_status']->Setup-cluster-monitor['setup_cluster_monitor']->Fetch-ssl-certs['fetch_ssl_certs']->Openstack_hacks['openstack_hacks']
+
 }
 # end of user defined type contrail_openstack.
 

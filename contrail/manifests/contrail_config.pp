@@ -22,9 +22,9 @@ define fix_rabbitmq_conf() {
 	if($internal_vip != "") {
 
             exec { "rabbit_os_fix":
-                command => "rabbitmqctl set_policy HA-all \"\" '{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}' && echo rabbit_os_fix >> /etc/contrail/contrail_openstack_exec.out",
+                command => "rabbitmqctl set_policy HA-all \"\" '{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}' && echo rabbit_os_fix >> /etc/contrail/contrail_config_exec.out",
                 require => package["contrail-openstack-ha"],
-                unless  => "grep -qx rabbit_os_fix /etc/contrail/contrail_openstack_exec.out",
+                unless  => "grep -qx rabbit_os_fix /etc/contrail/contrail_config_exec.out",
                 provider => shell,
                 logoutput => "true"
             }
@@ -43,9 +43,9 @@ if ! defined(File["/opt/contrail/contrail_installer/set_rabbit_tcp_params.py"]) 
 
 
 	    exec { "exec_set_rabbitmq_tcp_params" :
-		command => "python /opt/contrail/contrail_installer/set_rabbit_tcp_params.py",
+		command => "python /opt/contrail/contrail_installer/set_rabbit_tcp_params.py && echo exec_set_rabbitmq_tcp_params >> /etc/contrail/contrail_config_exec.out",
 		cwd => "/opt/contrail/contrail_installer/",
-		unless  => "grep -qx exec_set_rabbitmq_tcp_params /etc/contrail/contrail_openstack_exec.out",
+		unless  => "grep -qx exec_set_rabbitmq_tcp_params /etc/contrail/contrail_config_exec.out",
 		provider => shell,
 		require => [ File["/opt/contrail/contrail_installer/set_rabbit_tcp_params.py"] ],
 		logoutput => 'true'

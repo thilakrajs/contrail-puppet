@@ -44,6 +44,11 @@ define contrail_collector (
 
 		}
 	}
+    if($internal_vip != "") {
+    	$contrail_analytics_api_port = 9081
+    } else {
+	$contrail_analytics_api_port = 8081
+    }
 
     __$version__::contrail_common::report_status {"collector_started": state => "collector_started"}
     ->

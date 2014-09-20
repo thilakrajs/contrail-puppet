@@ -29,6 +29,18 @@ define compute-template-scripts {
     }
 }
 
+define neutron_hacks() {
+    exec { "neutron_hacks" :
+        command => "openstack-config --set /etc/neutron/neutron.conf keystone_authtoken auth_host $internal_vip && service neutron-server restart && echo neutron_hacks >> /etc/contrail/contrail_config_exec.out",
+        unless  => "grep -qx neutron_hacks /etc/contrail/contrail_config_exec.out",
+        provider => shell,
+        logoutput => "true"
+    }
+
+
+
+}
+
 define fix_rabbit_tcp_params() {
 
 	if($internal_vip != "" or $contrail_internal_vip != "" ) {
@@ -400,6 +412,7 @@ define contrail_compute_part_2 (
 		$vm_physical_intf = "eth1"
 	}
         compute-scripts { ["compute-server-setup"]: }
+	neutron_hacks { neutron_hacks: }
 
         # flag that part 2 is completed and reboot the system
         file { "/etc/contrail/interface_renamed" :
@@ -426,7 +439,7 @@ define contrail_compute_part_2 (
             provider => "shell",
             logoutput => 'true'
         }
-        Package['contrail-openstack-vrouter'] -> Create-nfs['create_nfs'] -> File["/etc/libvirt/qemu.conf"] -> Compute-template-scripts["vrouter_nodemgr_param"] -> Compute-template-scripts["default_pmac"] ->  Compute-template-scripts["agent_param.tmpl"] ->  Compute-template-scripts["rpm_agent.conf"] -> File["/etc/contrail/contrail_setup_utils/update_dev_net_config_files.py"] -> Exec["update-dev-net-config"] -> Exec["update-compute-nova-conf-file1"] -> Exec["update-compute-nova-conf-file2"] ->  Compute-template-scripts["contrail-vrouter-agent.conf"] -> File["/etc/contrail/contrail_setup_utils/provision_vrouter.py"]->Compute-template-scripts["vnc_api_lib.ini"]-> Exec["add-vnc-config"] -> Compute-scripts["compute-server-setup"] -> File["/etc/contrail/interface_renamed"] -> Exec["reboot-server"]
+        Package['contrail-openstack-vrouter'] -> Create-nfs['create_nfs'] -> File["/etc/libvirt/qemu.conf"] -> Compute-template-scripts["vrouter_nodemgr_param"] -> Compute-template-scripts["default_pmac"] ->  Compute-template-scripts["agent_param.tmpl"] ->  Compute-template-scripts["rpm_agent.conf"] -> File["/etc/contrail/contrail_setup_utils/update_dev_net_config_files.py"] -> Exec["update-dev-net-config"] -> Exec["update-compute-nova-conf-file1"] -> Exec["update-compute-nova-conf-file2"] ->  Compute-template-scripts["contrail-vrouter-agent.conf"] -> File["/etc/contrail/contrail_setup_utils/provision_vrouter.py"]->Compute-template-scripts["vnc_api_lib.ini"]-> Exec["add-vnc-config"] -> Compute-scripts["compute-server-setup"] -> File["/etc/contrail/interface_renamed"] -> Neutron_hacks['neutron_hacks'] ->Exec["reboot-server"]
     }
     else {
         file { "/etc/contrail/contrail_setup_utils/update_dev_net_config_files.py":
