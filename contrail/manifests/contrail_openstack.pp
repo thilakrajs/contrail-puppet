@@ -174,7 +174,6 @@ define setup-ha($internal_vip) {
 
 
     setup-openstack-ha{setup_openstack_ha:
-	ha => $ha
 	}
 ->
 
@@ -369,7 +368,7 @@ fix-wsrep{'fix_wsrep':}
 
 }
 
-define setup-openstack-ha($ha) {
+define setup-openstack-ha() {
 
 #   if($contrail_openstack_ha == "yes") {
        package { 'contrail-openstack-ha' : ensure => present,}
