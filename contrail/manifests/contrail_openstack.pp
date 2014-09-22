@@ -149,13 +149,17 @@ define setup-ha($internal_vip) {
             $glance_path ="/var"
 
             #$openstack_ip_list_wsrep_cpy = $openstack_ip_list
-            $openstack_ip_list_shell = inline_template('<%= openstack_ip_list.map{ |ip| "#{ip}" }.join(",") %>')
-            $openstack_user_list_shell = inline_template('<%= openstack_user_list.map{ |name| "#{name}" }.join(",") %>')
             $openstack_pass_list_shell = inline_template('<%= openstack_password_list.map{ |name1| "#{name1}" }.join(",") %>')
             $openstack_ip_list_control_shell = inline_template('<%= openstack_ip_list_control.map{ |name2| "#{name2}" }.join(" ") %>')
             #$openstack_ip_list_wsrep = ""# inline_template('<%= openstack_ip_list_wsrep_cpy.map{ |name3| name3.concat(":4567") } %>')
             #$openstack_ip_list_wsrep_shell = "" # inline_template('<%= openstack_ip_list_wsrep.map{ |name4| "#{name}4" }.join(",") %>')
 	    #$test1 = inline_template('<%= openstack_ip_list_wsrep_cpy.map{ |name3| name3.concat(":4567") } %>')
+
+
+            $openstack_ip_list_shell = inline_template('<%= openstack_ip_list.map{ |ip| "#{ip}" }.join(",") %>')
+            $openstack_user_list_shell = inline_template('<%= openstack_user_list.map{ |ip| "#{ip}" }.join(",") %>')
+            $openstack_password_list_shell = inline_template('<%= openstack_password_list.map{ |ip| "#{ip}" }.join(",") %>')
+
 
 	    $contrail_exec_password_less_ssh = "python /opt/contrail/contrail_installer/setup_passwordless_ssh.py $openstack_ip_list_shell $openstack_user_list_shell $openstack_pass_list_shell && echo exec-setup-password-less-ssh >> /etc/contrail/contrail_openstack_exec.out"
 
@@ -282,6 +286,27 @@ define setup-ha($internal_vip) {
 	    }
 
 ->
+
+	    # check_galera
+	    file { "/opt/contrail/contrail_installer/check_galera.py" :
+		ensure  => present,
+		mode => 0755,
+		group => root,
+		source => "puppet:///modules/$module_name/check_galera.py"
+	    }
+
+->
+	    exec { "exec_check_galera" :
+		command => "python /opt/contrail/contrail_installer/check_galera.py $openstack_ip_list_shell $openstack_user_list_shell $openstack_password_list_shell && echo check_galera >> /etc/contrail/contrail_openstack_exec.out",
+		cwd => "/opt/contrail/contrail_installer/",
+		unless  => "grep -qx check_galera /etc/contrail/contrail_openstack_exec.out",
+		provider => shell,
+		require => [ File["/opt/contrail/contrail_installer/check_galera.py"] ],
+		logoutput => 'true'
+	    }
+
+->
+
 
 fix-wsrep{'fix_wsrep':}
 ->
